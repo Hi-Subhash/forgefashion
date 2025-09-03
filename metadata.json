@@ -1,0 +1,5 @@
+{
+  "name": "AI Fashion Customizer",
+  "description": "An e-commerce app that allows users to design and visualize custom clothing using AI, and then place an order.",
+  "requestFramePermissions": []
+}
