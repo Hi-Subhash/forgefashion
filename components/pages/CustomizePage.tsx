@@ -5,6 +5,7 @@ import ModelViewer from '../customizer/ModelViewer';
 import { generateFashionImage, generateFashionDetails, generateInspirationPrompt } from '../../services/geminiService';
 import { useHistoryState } from '../../hooks/useHistoryState';
 import { Product } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface CustomizerState {
   prompt: string;
@@ -36,6 +37,7 @@ const initialState: CustomizerState = {
 
 
 const CustomizePage: React.FC = () => {
+  const { currentUser } = useAuth();
   const {
     state: customizerState,
     setState: setCustomizerState,
@@ -159,13 +161,16 @@ const CustomizePage: React.FC = () => {
       setGeneratedDetails(detailsHtml);
       setLatestGeneratedDesign(newDesign);
 
-      try {
-        const storedHistory = localStorage.getItem('designHistory');
-        const history = storedHistory ? JSON.parse(storedHistory) : [];
-        const newHistory = [newDesign, ...history].slice(0, 6); // Keep latest 6
-        localStorage.setItem('designHistory', JSON.stringify(newHistory));
-      } catch (e) {
-        console.error("Failed to save design to history:", e);
+      if (currentUser) {
+        try {
+            const historyKey = `designHistory_${currentUser.username}`;
+            const storedHistory = localStorage.getItem(historyKey);
+            const history = storedHistory ? JSON.parse(storedHistory) : [];
+            const newHistory = [newDesign, ...history].slice(0, 6); // Keep latest 6
+            localStorage.setItem(historyKey, JSON.stringify(newHistory));
+        } catch (e) {
+            console.error("Failed to save design to history:", e);
+        }
       }
 
     } catch (err: any) {
@@ -173,18 +178,19 @@ const CustomizePage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [customizerState]);
+  }, [customizerState, currentUser]);
 
   const handleSaveDesign = useCallback(() => {
-    if (!latestGeneratedDesign) return;
+    if (!latestGeneratedDesign || !currentUser) return;
 
     try {
-        const storedDesigns = localStorage.getItem('savedDesigns');
+        const designsKey = `savedDesigns_${currentUser.username}`;
+        const storedDesigns = localStorage.getItem(designsKey);
         const designs: Product[] = storedDesigns ? JSON.parse(storedDesigns) : [];
         
         if (!designs.some(d => d.id === latestGeneratedDesign.id)) {
             const newDesigns = [latestGeneratedDesign, ...designs];
-            localStorage.setItem('savedDesigns', JSON.stringify(newDesigns));
+            localStorage.setItem(designsKey, JSON.stringify(newDesigns));
             setIsCurrentDesignSaved(true);
         } else {
             setIsCurrentDesignSaved(true);
@@ -193,7 +199,7 @@ const CustomizePage: React.FC = () => {
         console.error("Failed to save design:", e);
         setError("Could not save your design. Please try again.");
     }
-  }, [latestGeneratedDesign]);
+  }, [latestGeneratedDesign, currentUser]);
 
 
   const handlePlaceOrder = () => {
@@ -217,6 +223,7 @@ const CustomizePage: React.FC = () => {
           isOrderable={!!generatedImage}
           onSaveDesign={handleSaveDesign}
           isSaved={isCurrentDesignSaved}
+          isLoggedIn={!!currentUser}
           onUndo={undo}
           onRedo={redo}
           canUndo={canUndo}

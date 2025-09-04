@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Product } from '../../types';
 import ProductCard from '../ui/ProductCard';
+import { useAuth } from '../../contexts/AuthContext';
 
 const mockProducts: Product[] = [
     { id: 1, name: 'The Artisan Trench', price: '$449.00', category: 'Outerwear', imageUrl: 'https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?q=80&w=800&auto=format&fit=crop' },
@@ -25,17 +27,25 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ onCustomizeClick }) => {
   const [recentCreations, setRecentCreations] = useState<Product[]>([]);
   const [activeCategory, setActiveCategory] = useState('All');
+  const { currentUser } = useAuth();
 
   useEffect(() => {
-    try {
-      const storedHistory = localStorage.getItem('designHistory');
-      if (storedHistory) {
-        setRecentCreations(JSON.parse(storedHistory));
+    if (currentUser) {
+      try {
+        const storedHistory = localStorage.getItem(`designHistory_${currentUser.username}`);
+        if (storedHistory) {
+          setRecentCreations(JSON.parse(storedHistory));
+        } else {
+          setRecentCreations([]);
+        }
+      } catch (error) {
+        console.error("Failed to parse design history from localStorage:", error);
+        setRecentCreations([]);
       }
-    } catch (error) {
-      console.error("Failed to parse design history from localStorage:", error);
+    } else {
+      setRecentCreations([]);
     }
-  }, []);
+  }, [currentUser]);
 
   const filteredProducts = useMemo(() => {
     if (activeCategory === 'All') {
@@ -68,7 +78,7 @@ const HomePage: React.FC<HomePageProps> = ({ onCustomizeClick }) => {
         </div>
       </div>
 
-      {recentCreations.length > 0 && (
+      {currentUser && recentCreations.length > 0 && (
         <div className="container mx-auto">
           <h2 className="text-3xl font-bold text-white mb-8 text-center">Your Recent Creations</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

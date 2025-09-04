@@ -25,6 +25,7 @@ interface CustomizerProps {
   isOrderable: boolean;
   onSaveDesign: () => void;
   isSaved: boolean;
+  isLoggedIn: boolean;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -61,6 +62,7 @@ const Customizer: React.FC<CustomizerProps> = ({
   isOrderable,
   onSaveDesign,
   isSaved,
+  isLoggedIn,
   onUndo,
   onRedo,
   canUndo,
@@ -72,7 +74,7 @@ const Customizer: React.FC<CustomizerProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-grow">
+      <div className="flex-grow overflow-y-auto pr-2 -mr-2">
         <div className="flex justify-between items-center mb-2">
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-bold text-white">Describe Your Vision</h2>
@@ -342,7 +344,8 @@ const Customizer: React.FC<CustomizerProps> = ({
             <>
                 <button
                     onClick={onSaveDesign}
-                    disabled={isSaved || isLoading}
+                    disabled={isSaved || isLoading || !isLoggedIn}
+                    title={!isLoggedIn ? 'Please log in to save your design' : ''}
                     className="w-full sm:w-auto bg-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-600 disabled:bg-blue-400/50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                 >
                     {isSaved ? (
