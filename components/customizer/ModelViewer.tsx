@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import Loader from '../ui/Loader';
 
@@ -45,10 +46,31 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ imageUrl, isLoading }) => {
     setIsPanning(false);
   };
 
+  const handlePanStartTouch = (e: React.TouchEvent<HTMLImageElement>) => {
+    if (!imageUrl || e.touches.length !== 1) return;
+    setIsPanning(true);
+    setStartPanPoint({
+      x: e.touches[0].clientX - panOffset.x,
+      y: e.touches[0].clientY - panOffset.y,
+    });
+  };
+
+  const handlePanMoveTouch = (e: React.TouchEvent<HTMLImageElement>) => {
+    if (!isPanning || !imageUrl || e.touches.length !== 1) return;
+    setPanOffset({
+      x: e.touches[0].clientX - startPanPoint.x,
+      y: e.touches[0].clientY - startPanPoint.y,
+    });
+  };
+
+  const handlePanEndTouch = () => {
+    setIsPanning(false);
+  };
+
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden rounded-lg">
-       {isLoading && <Loader text="Our AI is crafting your vision..."/>}
+       {isLoading && <Loader text="AI is rendering your design..."/>}
        <div className="relative w-[281px] h-[500px] md:w-[337px] md:h-[600px] flex items-center justify-center">
         {!imageUrl && !isLoading && (
             <div className="w-full h-full border-2 border-dashed border-white/30 rounded-lg flex flex-col items-center justify-center p-8 text-center">
@@ -68,11 +90,16 @@ const ModelViewer: React.FC<ModelViewerProps> = ({ imageUrl, isLoading }) => {
             onMouseMove={handlePanMove}
             onMouseUp={handlePanEnd}
             onMouseLeave={handlePanEnd}
+            onTouchStart={handlePanStartTouch}
+            onTouchMove={handlePanMoveTouch}
+            onTouchEnd={handlePanEndTouch}
+            onTouchCancel={handlePanEndTouch}
             style={{
               transform: `translateX(${panOffset.x}px) translateY(${panOffset.y}px) rotate(${rotation}deg) scale(${scale})`,
               transition: isPanning ? 'none' : 'transform 0.3s ease-in-out',
               cursor: isPanning ? 'grabbing' : 'grab',
-              animation: 'fadeIn 0.5s ease-in-out'
+              animation: 'fadeIn 0.5s ease-in-out',
+              touchAction: 'none'
             }}
           />
         )}

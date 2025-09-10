@@ -1,7 +1,9 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Product } from '../../types';
 import ProductCard from '../ui/ProductCard';
+import { useUserData } from '../../contexts/UserDataContext';
+import QuickViewModal from '../ui/QuickViewModal';
 import { useAuth } from '../../contexts/AuthContext';
 
 const mockProducts: Product[] = [
@@ -25,27 +27,10 @@ interface HomePageProps {
 }
 
 const HomePage: React.FC<HomePageProps> = ({ onCustomizeClick }) => {
-  const [recentCreations, setRecentCreations] = useState<Product[]>([]);
   const [activeCategory, setActiveCategory] = useState('All');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const { recentCreations } = useUserData();
   const { currentUser } = useAuth();
-
-  useEffect(() => {
-    if (currentUser) {
-      try {
-        const storedHistory = localStorage.getItem(`designHistory_${currentUser.username}`);
-        if (storedHistory) {
-          setRecentCreations(JSON.parse(storedHistory));
-        } else {
-          setRecentCreations([]);
-        }
-      } catch (error) {
-        console.error("Failed to parse design history from localStorage:", error);
-        setRecentCreations([]);
-      }
-    } else {
-      setRecentCreations([]);
-    }
-  }, [currentUser]);
 
   const filteredProducts = useMemo(() => {
     if (activeCategory === 'All') {
@@ -53,68 +38,86 @@ const HomePage: React.FC<HomePageProps> = ({ onCustomizeClick }) => {
     }
     return mockProducts.filter(product => product.category === activeCategory);
   }, [activeCategory]);
+  
+  const handleProductClick = (product: Product) => {
+    setSelectedProduct(product);
+  };
 
+  const handleCloseModal = () => {
+    setSelectedProduct(null);
+  };
 
   return (
-    <div className="space-y-16">
-      <div className="relative h-[60vh] -mx-4 -mt-8 flex items-center justify-center text-center text-white overflow-hidden">
-        <div 
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1920&auto=format&fit=crop')" }}
-        >
-          <div className="absolute inset-0 bg-black/40"></div>
-        </div>
-        <div className="relative px-4">
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">Forge Your Style.</h1>
-          <p className="mt-4 max-w-2xl mx-auto text-lg md:text-xl text-gray-200">
-            Bring your unique vision to life. Our AI-powered platform turns your ideas into one-of-a-kind apparel.
-          </p>
-          <button 
-              onClick={onCustomizeClick}
-              className="mt-8 inline-block bg-white text-black font-bold py-3 px-10 rounded-lg text-lg hover:bg-gray-200 transition-transform transform hover:scale-105 shadow-2xl"
+    <>
+      <div className="space-y-16">
+        <div className="relative h-[70vh] sm:h-[60vh] -mx-4 -mt-8 flex items-center justify-center text-center text-white overflow-hidden">
+          <div 
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: "url('https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1920&auto=format&fit=crop')" }}
           >
-            Start Designing Now
-          </button>
+            <div className="absolute inset-0 bg-black/40"></div>
+          </div>
+          <div className="relative px-4">
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">Forge Your Style.</h1>
+            <p className="mt-4 max-w-2xl mx-auto text-lg md:text-xl text-gray-200">
+              Bring your unique vision to life. Our AI-powered platform turns your ideas into one-of-a-kind apparel.
+            </p>
+            <button 
+                onClick={onCustomizeClick}
+                className="mt-8 inline-block bg-white text-black font-bold py-3 px-10 rounded-lg text-base md:text-lg hover:bg-gray-200 transition-transform transform hover:scale-105 shadow-2xl"
+            >
+              Start Designing Now
+            </button>
+          </div>
         </div>
-      </div>
 
-      {currentUser && recentCreations.length > 0 && (
+        {currentUser && recentCreations.length > 0 && (
+          <div className="container mx-auto">
+            <h2 className="text-3xl font-bold text-white mb-8 text-center">Your Recent Creations</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {recentCreations.map((product) => (
+                <ProductCard key={product.id} product={product} onClick={() => handleProductClick(product)} />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="container mx-auto">
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">Your Recent Creations</h2>
+          <h2 className="text-3xl font-bold text-white mb-8 text-center">Explore The Collection</h2>
+          
+          <div className="flex justify-center flex-wrap gap-3 mb-10">
+            {CATEGORIES.map(category => (
+              <button
+                key={category}
+                onClick={() => setActiveCategory(category)}
+                className={`px-5 py-2 text-sm font-semibold rounded-full transition-all duration-200 ${
+                  activeCategory === category
+                    ? 'bg-white text-black shadow-lg'
+                    : 'bg-white/10 text-white hover:bg-white/20'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {recentCreations.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {filteredProducts.map((product) => (
+              <ProductCard key={product.id} product={product} onClick={() => handleProductClick(product)} />
             ))}
           </div>
         </div>
-      )}
-
-      <div className="container mx-auto">
-        <h2 className="text-3xl font-bold text-white mb-8 text-center">Explore The Collection</h2>
-        
-        <div className="flex justify-center flex-wrap gap-3 mb-10">
-          {CATEGORIES.map(category => (
-            <button
-              key={category}
-              onClick={() => setActiveCategory(category)}
-              className={`px-5 py-2 text-sm font-semibold rounded-full transition-all duration-200 ${
-                activeCategory === category
-                  ? 'bg-white text-black shadow-lg'
-                  : 'bg-white/10 text-white hover:bg-white/20'
-              }`}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
       </div>
-    </div>
+      <QuickViewModal 
+        isOpen={!!selectedProduct}
+        onClose={handleCloseModal}
+        product={selectedProduct}
+        onCustomizeClick={() => {
+          handleCloseModal();
+          onCustomizeClick();
+        }}
+      />
+    </>
   );
 };
 

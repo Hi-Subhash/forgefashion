@@ -8,3 +8,11 @@ export interface Product {
 }
 
 export type View = 'shop' | 'customize' | 'gallery';
+
+export type NotificationType = 'success' | 'error' | 'info';
+
+export interface Notification {
+  id: number;
+  message: string;
+  type: NotificationType;
+}

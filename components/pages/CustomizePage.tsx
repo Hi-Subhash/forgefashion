@@ -1,11 +1,14 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Customizer from '../customizer/Customizer';
 import ModelViewer from '../customizer/ModelViewer';
 import { generateFashionImage, generateFashionDetails, generateInspirationPrompt } from '../../services/geminiService';
 import { useHistoryState } from '../../hooks/useHistoryState';
 import { Product } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUserData } from '../../contexts/UserDataContext';
+import { useNotification } from '../../contexts/NotificationContext';
+import OrderConfirmationModal from '../ui/OrderConfirmationModal';
 
 interface CustomizerState {
   prompt: string;
@@ -38,6 +41,9 @@ const initialState: CustomizerState = {
 
 const CustomizePage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { addRecentCreation, addSavedDesign, savedDesigns } = useUserData();
+  const { addNotification } = useNotification();
+  
   const {
     state: customizerState,
     setState: setCustomizerState,
@@ -51,10 +57,18 @@ const CustomizePage: React.FC = () => {
   const [generatedDetails, setGeneratedDetails] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isGeneratingInspiration, setIsGeneratingInspiration] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [latestGeneratedDesign, setLatestGeneratedDesign] = useState<Product | null>(null);
   const [isCurrentDesignSaved, setIsCurrentDesignSaved] = useState<boolean>(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
+  useEffect(() => {
+    if (latestGeneratedDesign) {
+      const isSaved = savedDesigns.some(d => d.id === latestGeneratedDesign.id);
+      setIsCurrentDesignSaved(isSaved);
+    } else {
+      setIsCurrentDesignSaved(false);
+    }
+  }, [latestGeneratedDesign, savedDesigns]);
 
   const handleStateChange = <K extends keyof CustomizerState>(field: K, value: CustomizerState[K]) => {
     setCustomizerState(prevState => {
@@ -71,7 +85,6 @@ const CustomizePage: React.FC = () => {
 
   const handleGenerateInspiration = useCallback(async () => {
     setIsGeneratingInspiration(true);
-    setError(null);
     try {
         const inspiration = await generateInspirationPrompt();
         setCustomizerState(prevState => ({
@@ -82,66 +95,44 @@ const CustomizePage: React.FC = () => {
             weight: inspiration.weight || 'any',
         }));
     } catch (err: any) {
-        setError(err.message || 'An unexpected error occurred while generating inspiration.');
+        addNotification(err.message || 'An unexpected error occurred while generating inspiration.', 'error');
     } finally {
         setIsGeneratingInspiration(false);
     }
-  }, [setCustomizerState]);
+  }, [setCustomizerState, addNotification]);
 
 
   const handleGenerate = useCallback(async () => {
     if (!customizerState.prompt.trim()) {
-      setError('Please enter a description for your design.');
+      addNotification('Please enter a description for your design.', 'error');
       return;
     }
     setIsLoading(true);
-    setError(null);
     setGeneratedImage(null);
     setGeneratedDetails(null);
     setLatestGeneratedDesign(null);
-    setIsCurrentDesignSaved(false);
 
     let finalPrompt = customizerState.prompt.trim();
     const additions: string[] = [];
     
     const { color, sleeveLength, neckline, fabric, pattern, category, size, sheen, texture, weight } = customizerState;
     
-    if (size && size.toLowerCase() !== 'any') {
-      additions.push(`size ${size.toUpperCase()}`);
-    }
-    if (category && category.toLowerCase() !== 'any') {
-      additions.push(`as a clothing item in the '${category}' category`);
-    }
-    if (color) {
-      additions.push(`with a primary color of ${color}`);
-    }
-    if (sleeveLength && sleeveLength.toLowerCase() !== 'any') {
-      additions.push(`with ${sleeveLength.replace('-', ' ')}`);
-    }
-    if (neckline && neckline.toLowerCase() !== 'any') {
-      additions.push(`and a ${neckline.replace('-', ' ')} neckline`);
-    }
+    if (size && size.toLowerCase() !== 'any') additions.push(`size ${size.toUpperCase()}`);
+    if (category && category.toLowerCase() !== 'any') additions.push(`as a clothing item in the '${category}' category`);
+    if (color) additions.push(`with a primary color of ${color}`);
+    if (sleeveLength && sleeveLength.toLowerCase() !== 'any') additions.push(`with ${sleeveLength.replace('-', ' ')}`);
+    if (neckline && neckline.toLowerCase() !== 'any') additions.push(`and a ${neckline.replace('-', ' ')} neckline`);
     
-    // Combine material properties for a more natural prompt
     const materialParts = [];
     if (weight && weight.toLowerCase() !== 'any') materialParts.push(weight);
     if (texture && texture.toLowerCase() !== 'any') materialParts.push(texture);
     if (sheen && sheen.toLowerCase() !== 'any') materialParts.push(sheen);
     if (fabric && fabric.toLowerCase() !== 'any') materialParts.push(fabric);
 
-    if (materialParts.length > 0) {
-        additions.push(`made from a ${materialParts.join(' ')} material`);
-    }
+    if (materialParts.length > 0) additions.push(`made from a ${materialParts.join(' ')} material`);
+    if (pattern && pattern.toLowerCase() !== 'any') additions.push(`with a ${pattern} pattern`);
 
-    if (pattern && pattern.toLowerCase() !== 'any') {
-      additions.push(`with a ${pattern} pattern`);
-    }
-
-
-    if (additions.length > 0) {
-      finalPrompt += `, ${additions.join(', ')}`;
-    }
-
+    if (additions.length > 0) finalPrompt += `, ${additions.join(', ')}`;
 
     try {
       const [imageBase64, detailsHtml] = await Promise.all([
@@ -162,83 +153,77 @@ const CustomizePage: React.FC = () => {
       setLatestGeneratedDesign(newDesign);
 
       if (currentUser) {
-        try {
-            const historyKey = `designHistory_${currentUser.username}`;
-            const storedHistory = localStorage.getItem(historyKey);
-            const history = storedHistory ? JSON.parse(storedHistory) : [];
-            const newHistory = [newDesign, ...history].slice(0, 6); // Keep latest 6
-            localStorage.setItem(historyKey, JSON.stringify(newHistory));
-        } catch (e) {
-            console.error("Failed to save design to history:", e);
-        }
+        addRecentCreation(newDesign);
       }
-
+      addNotification('Your design has been visualized!', 'success');
     } catch (err: any) {
-      setError((err as Error).message || 'An unexpected error occurred.');
+      addNotification((err as Error).message || 'An unexpected error occurred.', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [customizerState, currentUser]);
+  }, [customizerState, currentUser, addRecentCreation, addNotification]);
 
   const handleSaveDesign = useCallback(() => {
     if (!latestGeneratedDesign || !currentUser) return;
 
     try {
-        const designsKey = `savedDesigns_${currentUser.username}`;
-        const storedDesigns = localStorage.getItem(designsKey);
-        const designs: Product[] = storedDesigns ? JSON.parse(storedDesigns) : [];
-        
-        if (!designs.some(d => d.id === latestGeneratedDesign.id)) {
-            const newDesigns = [latestGeneratedDesign, ...designs];
-            localStorage.setItem(designsKey, JSON.stringify(newDesigns));
-            setIsCurrentDesignSaved(true);
-        } else {
-            setIsCurrentDesignSaved(true);
-        }
+        addSavedDesign(latestGeneratedDesign);
+        addNotification('Design saved to your gallery!', 'success');
     } catch (e) {
         console.error("Failed to save design:", e);
-        setError("Could not save your design. Please try again.");
+        addNotification("Could not save your design. Please try again.", 'error');
     }
-  }, [latestGeneratedDesign, currentUser]);
+  }, [latestGeneratedDesign, currentUser, addSavedDesign, addNotification]);
 
 
   const handlePlaceOrder = () => {
     if(generatedImage) {
-        alert('Thank you for your order! Your unique design is now being processed.');
+        setIsConfirmModalOpen(true);
     }
   };
 
+  const handleConfirmOrder = () => {
+    setIsConfirmModalOpen(false);
+    addNotification('Thank you for your order! Your unique design is now being processed.', 'success');
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full min-h-[75vh]">
-      <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 p-6 flex flex-col">
-        <Customizer
-          state={customizerState}
-          onStateChange={handleStateChange}
-          onGenerate={handleGenerate}
-          isLoading={isLoading}
-          isGeneratingInspiration={isGeneratingInspiration}
-          onGenerateInspiration={handleGenerateInspiration}
-          generatedDetails={generatedDetails}
-          onPlaceOrder={handlePlaceOrder}
-          isOrderable={!!generatedImage}
-          onSaveDesign={handleSaveDesign}
-          isSaved={isCurrentDesignSaved}
-          isLoggedIn={!!currentUser}
-          onUndo={undo}
-          onRedo={redo}
-          canUndo={canUndo}
-          canRedo={canRedo}
-        />
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full min-h-[75vh]">
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 p-6 flex flex-col">
+          <Customizer
+            state={customizerState}
+            onStateChange={handleStateChange}
+            onGenerate={handleGenerate}
+            isLoading={isLoading}
+            isGeneratingInspiration={isGeneratingInspiration}
+            onGenerateInspiration={handleGenerateInspiration}
+            generatedDetails={generatedDetails}
+            onPlaceOrder={handlePlaceOrder}
+            isOrderable={!!generatedImage}
+            onSaveDesign={handleSaveDesign}
+            isSaved={isCurrentDesignSaved}
+            isLoggedIn={!!currentUser}
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={canUndo}
+            canRedo={canRedo}
+          />
+        </div>
+        <div className="bg-black/20 backdrop-blur-lg rounded-2xl shadow-lg flex items-center justify-center p-4 relative min-h-[50vh] lg:min-h-0 border border-white/20">
+          <ModelViewer imageUrl={generatedImage} isLoading={isLoading} />
+        </div>
       </div>
-      <div className="bg-black/20 backdrop-blur-lg rounded-2xl shadow-lg flex items-center justify-center p-4 relative min-h-[50vh] lg:min-h-0 border border-white/20">
-        <ModelViewer imageUrl={generatedImage} isLoading={isLoading} />
-        {error && (
-            <div className="absolute inset-0 bg-red-500/20 backdrop-blur-sm flex items-center justify-center p-4 rounded-lg">
-                <p className="text-red-100 text-center font-medium">{error}</p>
-            </div>
-        )}
-      </div>
-    </div>
+      <OrderConfirmationModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={handleConfirmOrder}
+        designDetails={{
+          category: customizerState.category,
+          prompt: latestGeneratedDesign?.name || customizerState.prompt
+        }}
+      />
+    </>
   );
 };
 
